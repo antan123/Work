@@ -1,0 +1,100 @@
+# Using lpsolve
+require("lpSolve")
+require("lpSolveAPI")
+##Kable for pretty display
+require("kableExtra")
+require("knitr")
+require("dplyr")
+require("readxl")
+##Import the Data
+
+setwd("C:/Users/DT-021/Desktop/Stargas")
+
+stargas = read_excel("StarGas - All Traffic Sources.xlsx")
+constraints = read.csv("Constraints.txt", sep = "|", dec = ".")
+
+
+stargas_channel_agg = group_by(stargas, Traffic_Source_Final)%>% filter(Date >= "2017-01-01") %>% summarize(Clicks = sum(Clicks), Impressions = sum(Impressions),Actual_Spend = sum(Actual_Spend),Conversions = sum(na.omit(Conversions)))
+
+stargas_channel_agg$ClicksPC = stargas_channel_agg$Clicks/stargas_channel_agg$Actual_Spend
+stargas_channel_agg$IPC = stargas_channel_agg$Impressions/stargas_channel_agg$Actual_Spend
+stargas_channel_agg$ConvPC = stargas_channel_agg$Conversions/stargas_channel_agg$Actual_Spend
+
+head(stargas_channel_agg)
+
+# Defining the model
+model = make.lp(ncol = 4)
+model_parameters = lp.control(model, sense = "max")
+
+#Sets the objective function and takes vector of coefficient of variables in the objective function
+m_objfn = set.objfn(model, obj = c(stargas_channel_agg$ConvPC[1], stargas_channel_agg$ConvPC[2], stargas_channel_agg$ConvPC[3], stargas_channel_agg$ConvPC[4]))
+
+#User constraints to set bounds to the limits of variables
+#Assuming we will be spending a minimum of 10000$ across channels
+m_bounds = set.bounds(model, lower = c(constraints$Quantity[1],constraints$Quantity[2],constraints$Quantity[3],constraints$Quantity[4]))
+
+#Total budget constraint assuming a budget of 100,000
+m_budget = add.constraint(model, c(1,1,1,1), type = "<=", 100000)
+
+#Impression Constraint
+#Assuming minimum impression from each channel to be 1000
+### Impression Constraints Code
+m_impression_1 = add.constraint(model, c(stargas_channel_agg$IPC[1],0,0,0),
+                                type = constraints$Sign[5], constraints$Quantity[5])
+
+m_impression_2 = add.constraint(model, c(0,stargas_channel_agg$IPC[2],0,0),
+                                type = constraints$Sign[6], constraints$Quantity[6])
+
+m_impression_3 = add.constraint(model, c(0,0,stargas_channel_agg$IPC[3],0),
+                                type = constraints$Sign[7], constraints$Quantity[7])
+
+m_impression_4 = add.constraint(model, c(0,0,0,stargas_channel_agg$IPC[4]),
+                                type = constraints$Sign[8], constraints$Quantity[8])
+
+
+
+
+#Clicks Constraints
+#Assuming minimum 500 clicks from each channel
+### click Constraints Code
+m_click_1 = add.constraint(model, c(stargas_channel_agg$ClicksPC[1],0,0,0),
+                                type = constraints$Sign[9], constraints$Quantity[9])
+
+m_click_2 = add.constraint(model, c(0,stargas_channel_agg$ClicksPC[2],0,0),
+                                type = constraints$Sign[10], constraints$Quantity[10])
+
+m_click_3 = add.constraint(model, c(0,0,stargas_channel_agg$ClicksPC[3],0),
+                                type = constraints$Sign[11], constraints$Quantity[11])
+
+m_click_4 = add.constraint(model, c(0,0,0,stargas_channel_agg$ClicksPC[4]),
+                                type = constraints$Sign[12], constraints$Quantity[12])
+
+
+
+#Conversion Constraints
+#Assuming minimum 100 conversions from each channel 
+### conversion Constraints Code
+m_conversion_1 = add.constraint(model, c(stargas_channel_agg$ConvPC[1],0,0,0),
+                                type = constraints$Sign[13], constraints$Quantity[13])
+
+m_conversion_2 = add.constraint(model, c(stargas_channel_agg$ConvPC[2],0,0,0),
+                                type = constraints$Sign[14], constraints$Quantity[14])
+
+m_conversion_3 = add.constraint(model, c(0,0,stargas_channel_agg$ConvPC[3],0),
+                                type = constraints$Sign[15], constraints$Quantity[15])
+
+m_conversion_4 = add.constraint(model, c(0,0,0,stargas_channel_agg$ConvPC[4]),
+                                type = constraints$Sign[16], constraints$Quantity[16])
+
+
+
+#rownames = c("Constraint")
+#colnames = c("Adwords Budget","Bing Budget","DCM Budget", "Facebook Budget")
+#dimnames(model) = list(rownames,colnames)
+name.lp(model, "Conversion Maximization")
+write.lp(model, filename = "model.lp")
+kable(readLines("model.lp"))
+
+solve(model)
+get.variables(model)
+get.objective(model)
