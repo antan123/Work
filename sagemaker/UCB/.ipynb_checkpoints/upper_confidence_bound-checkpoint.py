@@ -32,6 +32,7 @@ for n in range(0, N):
     ads_selected.append(ad)
     numbers_of_selections[ad] = numbers_of_selections[ad] + 1
     reward = dataset.values[n, ad]
+    print(dataset.values[n, ad])
     sums_of_rewards[ad] = sums_of_rewards[ad] + reward
     total_reward = total_reward + reward
 
